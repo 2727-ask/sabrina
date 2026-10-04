@@ -11,8 +11,8 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/solver ./cmd/solve
 FROM alpine:3.21
 RUN apk add --no-cache podman crun fuse-overlayfs slirp4netns shadow-uidmap ca-certificates \
  && adduser -D -u 1000 runner \
- && echo "runner:100000:65536" > /etc/subuid \
- && echo "runner:100000:65536" > /etc/subgid \
+ && echo "runner:10000:55000" > /etc/subuid \
+ && echo "runner:10000:55000" > /etc/subgid \
  && mkdir -p /var/log/job /home/runner/.local/share/containers /home/runner/.config/containers \
  && chown -R 1000:1000 /var/log/job /home/runner
 
