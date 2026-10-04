@@ -2,8 +2,8 @@ package config
 
 import (
 	"fmt"
-	"net/url"
 	"os"
+
 	"github.com/joho/godotenv"
 )
 
@@ -30,22 +30,16 @@ func amqpURL(env string) string {
 	if v := os.Getenv("AMQP_URL"); v != "" {
 		return v
 	}
-
-	host := "localhost:5672" // local port forwarding
-
-	if env == "production" {
-		host = get("RABBITMQ_HOST", "rabbitmq.jobstar.svc.cluster.local:5672")
-	}
-
-	user := get("RABBITMQ_USER", "user")
+	user := get("RABBITMQ_USER", "guest")
 	pass := get("RABBITMQ_PASS", "guest")
 
-	return fmt.Sprintf(
-		"amqp://%s:%s@%s/",
-		url.QueryEscape(user),
-		url.QueryEscape(pass),
-		host,
-	)
+	def := "127.0.0.1:5672" // local: port-forward
+	if env == "production" {
+		def = "rabbitmq.<namespace>.svc.cluster.local:5672"
+	}
+	host := get("RABBITMQ_HOST", def)
+
+	return fmt.Sprintf("amqp://%s:%s@%s/", user, pass, host)
 }
 
 func get(k, def string) string {

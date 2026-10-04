@@ -1,0 +1,28 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: jobstar
+  namespace: jobstar
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: traefik
+
+  tls:
+    - hosts:
+        - jobstar.rkumbhar.com
+      secretName: jobstar-tls
+
+  rules:
+    - host: jobstar.rkumbhar.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: jobstar
+                port:
+                  name: http
+
+
