@@ -33,7 +33,7 @@ func amqpURL(env string) string {
 	user := get("RABBITMQ_USER", "guest")
 	pass := get("RABBITMQ_PASS", "guest")
 
-	def := "127.0.0.1:5672" // local: port-forward
+	def := get("RABBITMQ_HOST", "localhost:58167") // local: port-forward
 	if env == "production" {
 		def = "rabbitmq.<namespace>.svc.cluster.local:5672"
 	}
