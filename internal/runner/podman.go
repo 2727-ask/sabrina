@@ -28,7 +28,7 @@ func Run(ctx context.Context, image, logPath string) (int, error) {
 	defer f.Close()
 	out := io.MultiWriter(f, os.Stdout)
 
-	cmd := exec.CommandContext(ctx, "podman", "run", "--rm", image)
+	cmd := exec.CommandContext(ctx, "podman", "run", "--rm", "--network=host", "--cgroups=disabled",image)
 	cmd.Stdout, cmd.Stderr = out, out
 
 	err = cmd.Run()
