@@ -60,6 +60,8 @@ spec:
               allowPrivilegeEscalation: true
               seccompProfile:
                 type: Unconfined
+              appArmorProfile:
+                type: Unconfined
   triggers:
     - type: rabbitmq
       metadata:
