@@ -9,8 +9,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  PACKAGE_NAME: jobstar
-  MANIFEST: k8s/jobstar/deployment.yaml
 
 # Serialize runs on main so the manifest-bump commit never races another push.
 concurrency:
@@ -26,6 +24,7 @@ jobs:
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
       image: ${{ steps.image.outputs.image }}
+      solver_image: ${{ steps.image.outputs.solver_image }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -43,24 +42,41 @@ jobs:
         run: echo "tag=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
 
       - id: image
-        run: echo "image=${REGISTRY}/${REPO,,}" >> $GITHUB_OUTPUT
+        run: |
+          echo "image=${REGISTRY}/${REPO,,}" >> $GITHUB_OUTPUT
+          echo "solver_image=${REGISTRY}/${REPO,,}-solver" >> $GITHUB_OUTPUT
         env:
           REGISTRY: ${{ env.REGISTRY }}
           REPO: ${{ github.repository }}
 
-      - uses: docker/build-push-action@v5
+      - name: Build and push API image
+        uses: docker/build-push-action@v5
         with:
           context: .
+          file: Dockerfile
           push: true
           tags: |
             ${{ steps.image.outputs.image }}:${{ steps.tag.outputs.tag }}
             ${{ steps.image.outputs.image }}:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
 
-      - name: Update image tag in manifest
+      - name: Build and push solver image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.solver
+          push: true
+          tags: |
+            ${{ steps.image.outputs.solver_image }}:${{ steps.tag.outputs.tag }}
+            ${{ steps.image.outputs.solver_image }}:latest
+          cache-from: type=gha,scope=solver
+          cache-to: type=gha,mode=max,scope=solver
+
+      - name: Update image tags in manifests
         env:
           IMAGE: ${{ steps.image.outputs.image }}
+          SOLVER_IMAGE: ${{ steps.image.outputs.solver_image }}
           TAG: ${{ steps.tag.outputs.tag }}
         run: |
           git config user.name "github-actions[bot]"
@@ -68,13 +84,21 @@ jobs:
           for attempt in 1 2 3 4 5; do
             git fetch origin main
             git reset --hard origin/main
-            sed -i "s|image: ghcr.io/.*jobstar:.*|image: ${IMAGE}:${TAG}|g" "$MANIFEST"
-            git add "$MANIFEST"
+
+            if [ -f k8s/jobstar/deployment.yaml ]; then
+              sed -i "s|image: ${IMAGE}:.*|image: ${IMAGE}:${TAG}|g" k8s/jobstar/deployment.yaml
+              git add k8s/jobstar/deployment.yaml
+            fi
+            if [ -f k8s/jobstar/scaledjob.yaml ]; then
+              sed -i "s|image: ${SOLVER_IMAGE}:.*|image: ${SOLVER_IMAGE}:${TAG}|g" k8s/jobstar/scaledjob.yaml
+              git add k8s/jobstar/scaledjob.yaml
+            fi
+
             if git diff --staged --quiet; then
-              echo "Manifest already at ${TAG}; nothing to push."
+              echo "Manifests already at ${TAG}; nothing to push."
               exit 0
             fi
-            git commit -m "chore: bump image to ${TAG} [skip ci]"
+            git commit -m "chore: bump images to ${TAG} [skip ci]"
             if git push origin HEAD:main; then
               echo "Pushed manifest bump to ${TAG}."
               exit 0
@@ -90,12 +114,15 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       packages: write
+    strategy:
+      matrix:
+        suffix: ["", "-solver"]
     steps:
       - name: Delete old container versions
         uses: actions/delete-package-versions@v5
         with:
-          owner: proskul
-          package-name: ${{ env.PACKAGE_NAME }}
+          owner: ${{ github.repository_owner }}
+          package-name: ${{ github.event.repository.name }}${{ matrix.suffix }}
           package-type: container
           min-versions-to-keep: 5
           delete-only-untagged-versions: false
