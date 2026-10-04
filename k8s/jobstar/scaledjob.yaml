@@ -1,0 +1,70 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledJob
+metadata:
+  name: solver
+  namespace: jobstar
+spec:
+  pollingInterval: 5
+  maxReplicaCount: 20
+  successfulJobsHistoryLimit: 10
+  failedJobsHistoryLimit: 10
+  scalingStrategy:
+    strategy: accurate
+  jobTargetRef:
+    backoffLimit: 0
+    activeDeadlineSeconds: 86400
+    template:
+      metadata:
+        labels:
+          app: solver
+          component: job-runner
+      spec:
+        serviceAccountName: solver
+        restartPolicy: Never
+        hostUsers: false
+        volumes:
+          - name: logs
+            emptyDir: {}
+          - name: containers
+            emptyDir: {}
+        containers:
+          - name: solver
+            image: ghcr.io/proskul/sabrina-solver:latest
+            env:
+              - name: APP_ENV
+                value: "production"
+              - name: POD_NAME
+                valueFrom:
+                  fieldRef: { fieldPath: metadata.name }
+              - name: POD_NAMESPACE
+                valueFrom:
+                  fieldRef: { fieldPath: metadata.namespace }
+              - name: LOG_DIR
+                value: /var/log/job
+              - name: AMQP_URL
+                valueFrom:
+                  secretKeyRef: { name: app-secrets, key: rabbitmq-amqp-url }
+              - name: DATABASE_URL
+                valueFrom:
+                  secretKeyRef: { name: app-secrets, key: database-url }
+            volumeMounts:
+              - { name: logs, mountPath: /var/log/job }
+              - { name: containers, mountPath: /home/runner/.local/share/containers }
+            resources:
+              requests: { cpu: 250m, memory: 256Mi }
+              limits: { cpu: "2", memory: 4Gi }
+            securityContext:
+              runAsNonRoot: true
+              runAsUser: 1000
+              runAsGroup: 1000
+              allowPrivilegeEscalation: true
+              seccompProfile:
+                type: Unconfined
+  triggers:
+    - type: rabbitmq
+      metadata:
+        queueName: jobs
+        mode: QueueLength
+        value: "1"
+      authenticationRef:
+        name: rabbitmq-auth
