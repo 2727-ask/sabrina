@@ -22,7 +22,7 @@ spec:
     spec:
       containers:
         - name: api
-          image: ghcr.io/proskul/sabrina:90c9fbd
+          image: ghcr.io/proskul/sabrina:27d4c3f
           ports:
             - name: http
               containerPort: 8080
