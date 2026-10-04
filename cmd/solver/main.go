@@ -1,4 +1,4 @@
-package solver
+package main
 
 import (
 	"context"
@@ -19,9 +19,11 @@ import (
 	"github.com/2727-ask/jobstar/internal/runner"
 )
 
-
-
-
+func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
 
 func run() error {
 	cfg := config.Load()
