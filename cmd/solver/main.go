@@ -78,11 +78,14 @@ func run() error {
 	// The message is acked, so free the broker connection before a long job.
 	closeTaker()
 
-	if err := kube.LabelPod(ctx, job.ID); err != nil {
+	created, err := kube.LabelPod(ctx, job.ID)
+	if err != nil {
 		log.Printf("label pod: %v", err) // not fatal
+	} else if err := database.SetPodCreated(ctx, job.ID, created); err != nil {
+		log.Printf("store pod created time: %v", err)
 	}
 
-	res := execute(ctx, job)
+	res := execute(ctx, database, job)
 
 	// Use a fresh context, because ctx may be cancelled by SIGTERM.
 	fctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -116,7 +119,7 @@ func markRunning(ctx context.Context, d *db.DB, id, pod string) error {
 	return err
 }
 
-func execute(ctx context.Context, job model.Job) db.Result {
+func execute(ctx context.Context, database *db.DB, job model.Job) db.Result {
 	if err := runner.ValidImage(job.Image); err != nil {
 		log.Println(err)
 		return db.Result{ExitCode: -1}
@@ -126,17 +129,34 @@ func execute(ctx context.Context, job model.Job) db.Result {
 	if logDir == "" {
 		logDir = "/var/log/job"
 	}
+	logPath := filepath.Join(logDir, "job.log")
 
-	cpuBefore := runner.CPUSeconds()
-	code, err := runner.Run(ctx, job.Image, filepath.Join(logDir, "job.log"))
+	code, err := runner.Pull(ctx, job.Image, logPath)
+	if err != nil || code != 0 {
+		if err != nil {
+			log.Printf("pull: %v", err)
+			code = -1
+		}
+		return db.Result{ExitCode: code}
+	}
+
+	// Measure from here, so the image pull is not counted.
+	stop := runner.Sample(2 * time.Second)
+	if err := database.SetRunStarted(ctx, job.ID); err != nil {
+		log.Printf("store run start: %v", err)
+	}
+
+	code, err = runner.Run(ctx, job.Image, logPath)
 	if err != nil {
 		log.Printf("run: %v", err)
 		code = -1
 	}
 
+	u := stop()
 	return db.Result{
 		ExitCode:   code,
-		CPUSeconds: runner.CPUSeconds() - cpuBefore,
-		PeakMemory: runner.PeakMemory(),
+		CPUSeconds: u.CPUSeconds,
+		PeakMemory: u.PeakMemory,
+		AvgMemory:  u.AvgMemory,
 	}
 }

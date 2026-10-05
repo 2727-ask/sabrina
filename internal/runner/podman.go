@@ -18,9 +18,7 @@ func ValidImage(image string) error {
 	return nil
 }
 
-// Run starts the image and returns its exit code.
-// Output goes to the log file and to stdout.
-func Run(ctx context.Context, image, logPath string) (int, error) {
+func podman(ctx context.Context, logPath string, args ...string) (int, error) {
 	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		return -1, err
@@ -28,7 +26,7 @@ func Run(ctx context.Context, image, logPath string) (int, error) {
 	defer f.Close()
 	out := io.MultiWriter(f, os.Stdout)
 
-	cmd := exec.CommandContext(ctx, "podman", "run", "--rm", "--network=host", "--pid=host", image)
+	cmd := exec.CommandContext(ctx, "podman", args...)
 	cmd.Stdout, cmd.Stderr = out, out
 
 	err = cmd.Run()
@@ -40,4 +38,14 @@ func Run(ctx context.Context, image, logPath string) (int, error) {
 		return -1, err
 	}
 	return 0, nil
+}
+
+// Pull downloads the image.
+func Pull(ctx context.Context, image, logPath string) (int, error) {
+	return podman(ctx, logPath, "pull", image)
+}
+
+// Run starts the image and returns its exit code.
+func Run(ctx context.Context, image, logPath string) (int, error) {
+	return podman(ctx, logPath, "run", "--rm", "--network=host", "--pid=host", image)
 }

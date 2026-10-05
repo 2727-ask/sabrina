@@ -37,3 +37,13 @@ func PeakMemory() int64 {
 	n, _ := strconv.ParseInt(strings.TrimSpace(string(b)), 10, 64)
 	return n
 }
+
+// MemoryCurrent returns the memory in use right now, in bytes.
+func MemoryCurrent() int64 {
+	b, err := os.ReadFile(cgroupDir + "/memory.current")
+	if err != nil {
+		return 0
+	}
+	n, _ := strconv.ParseInt(strings.TrimSpace(string(b)), 10, 64)
+	return n
+}
