@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 
@@ -34,13 +35,19 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	defer database.Close()
+	defer closeWithTimeout("postgres", database.Close, 5*time.Second)
 
 	taker, err := queue.NewConsumer(cfg.AMQPURL)
 	if err != nil {
 		return err
 	}
-	defer taker.Close()
+	var closeOnce sync.Once
+	closeTaker := func() {
+		closeOnce.Do(func() {
+			closeWithTimeout("rabbitmq", taker.Close, 5*time.Second)
+		})
+	}
+	defer closeTaker()
 
 	msg, ok, err := taker.Consume("jobs")
 	if err != nil {
@@ -68,6 +75,9 @@ func run() error {
 	}
 	_ = msg.Ack(false)
 
+	// The message is acked, so free the broker connection before a long job.
+	closeTaker()
+
 	if err := kube.LabelPod(ctx, job.ID); err != nil {
 		log.Printf("label pod: %v", err) // not fatal
 	}
@@ -78,6 +88,20 @@ func run() error {
 	fctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	return database.MarkFinished(fctx, job.ID, res)
+}
+
+// closeWithTimeout stops a slow Close from blocking exit.
+func closeWithTimeout(name string, closeFn func(), d time.Duration) {
+	done := make(chan struct{})
+	go func() {
+		closeFn()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(d):
+		log.Printf("%s close timed out", name)
+	}
 }
 
 // markRunning retries briefly. The API may publish before its commit lands.
