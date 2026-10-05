@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: solver-alloy
+  namespace: jobstar
+data:
+  config.alloy: |
+    local.file_match "job" {
+      path_targets = [{
+        __path__  = "/var/log/job/*.log",
+        app       = "solver",
+        pod       = sys.env("POD_NAME"),
+        namespace = sys.env("POD_NAMESPACE"),
+      }]
+    }
+
+    loki.source.file "job" {
+      targets    = local.file_match.job.targets
+      forward_to = [loki.write.default.receiver]
+    }
+
+    loki.write "default" {
+      endpoint {
+        url = sys.env("LOKI_URL")
+      }
+    }

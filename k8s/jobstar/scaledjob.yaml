@@ -12,21 +12,48 @@ spec:
     strategy: accurate
   jobTargetRef:
     backoffLimit: 0
-    activeDeadlineSeconds: 86400
     template:
       metadata:
         labels:
           app: solver
           component: job-runner
+        annotations:
+          cluster-autoscaler.kubernetes.io/safe-to-evict: "false"
       spec:
         serviceAccountName: solver
         restartPolicy: Never
         hostUsers: false
         volumes:
           - name: logs
-            emptyDir: {}
+            emptyDir: { sizeLimit: 2Gi }
           - name: containers
-            emptyDir: {}
+            emptyDir: { sizeLimit: 20Gi }
+          - name: alloy-config
+            configMap:
+              name: solver-alloy
+        initContainers:
+          - name: log-shipper
+            image: grafana/alloy:v1.18.1
+            restartPolicy: Always
+            args:
+              - run
+              - /etc/alloy/config.alloy
+              - --storage.path=/tmp/alloy
+            env:
+              - name: POD_NAME
+                valueFrom:
+                  fieldRef: { fieldPath: metadata.name }
+              - name: POD_NAMESPACE
+                valueFrom:
+                  fieldRef: { fieldPath: metadata.namespace }
+              - name: LOKI_URL
+                value: http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push
+            volumeMounts:
+              - { name: logs, mountPath: /var/log/job, readOnly: true }
+              - { name: alloy-config, mountPath: /etc/alloy }
+            resources:
+              requests: { cpu: 50m, memory: 64Mi }
+              limits: { cpu: 200m, memory: 256Mi }
         containers:
           - name: solver
             image: ghcr.io/proskul/sabrina-solver:ab0284f

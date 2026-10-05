@@ -1,0 +1,39 @@
+deploymentMode: SingleBinary
+
+loki:
+  auth_enabled: false
+  commonConfig:
+    replication_factor: 1
+  schemaConfig:
+    configs:
+      - from: "2024-04-01"
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index:
+          prefix: loki_index_
+          period: 24h
+  storage:
+    type: filesystem
+  limits_config:
+    retention_period: 720h
+  compactor:
+    retention_enabled: true
+    delete_request_store: filesystem
+
+singleBinary:
+  replicas: 1
+  persistence:
+    enabled: true
+    size: 20Gi
+
+# Turn off the scalable components
+read:    { replicas: 0 }
+write:   { replicas: 0 }
+backend: { replicas: 0 }
+
+gateway:    { enabled: false }
+chunksCache:  { enabled: false }
+resultsCache: { enabled: false }
+lokiCanary: { enabled: false }
+test:       { enabled: false }
