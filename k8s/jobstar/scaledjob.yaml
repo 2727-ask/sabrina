@@ -29,7 +29,7 @@ spec:
             emptyDir: {}
         containers:
           - name: solver
-            image: ghcr.io/proskul/sabrina-solver:8e74441
+            image: ghcr.io/proskul/sabrina-solver:ab0284f
             env:
               - name: APP_ENV
                 value: "production"
